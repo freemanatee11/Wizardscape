@@ -25,7 +25,7 @@ def interface():
     print("Splitted: ", split_words)
     print("Remaining Words: ", next_available_words)
 
-    words_on_grid = place_everything(split_words, main_word_coords, "vertical")
+    words_on_grid = place_everything(split_words, main_word_coords)
 
     
     #Putting the words on grid#
@@ -51,10 +51,39 @@ def interface():
 
 #One directional pairing of words, to be changed#
 
-def place_everything(to_place, intersections, orientation):
+def place_everything(to_place, intersections):
     words_to_place = []
-    for a, b in zip(to_place, intersections):
-        words_to_place.append(place(a, b, orientation))
+    grid_bounds = (15, 25)  # Grid dimensions (rows, cols)
+    
+    for idx, (word_split, intersection) in enumerate(zip(to_place, intersections)):
+        orientation = "horizontal" if idx % 2 == 0 else "vertical"
+        placed_word = place(word_split, intersection, orientation)
+        
+        # Check for out of bounds placement
+        is_valid = True
+        for _, (y, x) in placed_word:
+            if (y < 0 or y >= grid_bounds[0] or 
+                x < 0 or x >= grid_bounds[1]):
+                is_valid = False
+                break
+        
+        # Check for conflicts with existing words
+        if is_valid:
+            for placed in words_to_place:
+                for new_letter, new_pos in placed_word:
+                    for old_letter, old_pos in placed:
+                        if new_pos == old_pos and new_letter != old_letter:
+                            is_valid = False
+                            break
+                    if not is_valid:
+                        break
+                if not is_valid:
+                    break
+        
+        # Only add valid placements
+        if is_valid:
+            words_to_place.append(placed_word)
+    
     return words_to_place
 
 
@@ -81,13 +110,18 @@ def place(splitted, intersection, orientation):
 
 #Splits the next words into 2 parts, one on the "left/up", the other on the "right/down"#
 def split_first_instance(word, letter):
-    loc = word.index(letter)
-    return [word[:loc], word[loc + 1:]]
+    try:
+        loc = word.index(letter)
+        return [word[:loc], word[loc + 1:]]
+    except ValueError:
+        return None  # Return None if letter not found
 
 def splits(words, letters):
     splitted = []
     for word, letter in zip(words, letters):
-        splitted.append(split_first_instance(word, letter))
+        result = split_first_instance(word, letter)
+        if result is not None:  # Only append if split was successful
+            splitted.append(result)
     return splitted    
 
 
@@ -106,13 +140,34 @@ def breakdown(lst):
 #Choose words based on the intersecting letter, ensuring that an intersection exists#
 def choose_n_words(choose_here, letters):
     chosen_words = []
+    unused_letters = []
+    
+    # Try to find words for each letter
     for i in letters:
         viable = [x for x in choose_here if i in x]
-        next_word = random.choice(viable)
-        chosen_words.append(next_word)
-        choose_here.remove(next_word)
+        if viable:
+            next_word = random.choice(viable)
+            chosen_words.append(next_word)
+            choose_here.remove(next_word)
+        else:
+            unused_letters.append(i)
+    
+    # If we couldn't find enough words, try alternative approach
+    if len(chosen_words) < len(letters):
+        # Try to find words with multiple required letters
+        for word in choose_here:
+            if any(letter in word for letter in unused_letters):
+                chosen_words.append(word)
+                # Remove used letters
+                unused_letters = [l for l in unused_letters if l not in word]
+                if not unused_letters:  # If we've used all letters
+                    break
+    
+    # Final check
+    if len(chosen_words) < len(letters) // 2:  # Allow for at least half the letters
+        raise ValueError(f"Not enough valid words found. Only found {len(chosen_words)} words for letters: {letters}")
+    
     return chosen_words
-
 
 
 #All words possible of length at most a number#
